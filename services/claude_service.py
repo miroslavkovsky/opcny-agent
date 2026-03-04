@@ -3,6 +3,7 @@ Claude API wrapper — centralizované volania pre všetkých agentov.
 """
 
 import logging
+
 from anthropic import AsyncAnthropic
 
 from config.settings import settings

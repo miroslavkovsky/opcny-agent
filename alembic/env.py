@@ -9,13 +9,11 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-
-from config.settings import settings
-from models.base import Base
-
 # Importujeme tabuľky aby sa zaregistrovali v Base.metadata
 import models.tables  # noqa: F401
+from alembic import context
+from config.settings import settings
+from models.base import Base
 
 config = context.config
 

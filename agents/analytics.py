@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from agents.base import BaseAgent
-from models import async_session, AnalyticsSnapshot
+from models import AnalyticsSnapshot, async_session
 from services.claude_service import ClaudeService
 from services.ga4_service import GA4Service
 from utils.notifications import notify_miro

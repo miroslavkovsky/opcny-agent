@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from agents.base import BaseAgent
 from config.persona import CONTENT_REVIEW_RULES, WRITING_PERSONA
-from models import async_session, ContentReview, ScheduledPost
+from models import ContentReview, ScheduledPost, async_session
 from services.claude_service import ClaudeService
 from utils.notifications import notify_miro
 

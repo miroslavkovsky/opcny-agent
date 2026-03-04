@@ -6,6 +6,7 @@ Pre DM notifikácie Mirovi sa používa discord.py bot.
 """
 
 import logging
+
 import httpx
 
 from config.settings import settings
@@ -84,10 +85,13 @@ class DiscordService:
             "success": 0x2ECC71,
         }
 
+        icon_map = {"info": "🔔", "warning": "⚠️", "error": "❌", "success": "✅"}
+        icon = icon_map.get(level, "🔔")
+
         payload = {
             "username": "Agent Notifikácie",
             "embeds": [{
-                "title": f"{'🔔' if level == 'info' else '⚠️' if level == 'warning' else '❌'} {title}",
+                "title": f"{icon} {title}",
                 "description": message[:4096],
                 "color": color_map.get(level, 0x3498DB),
             }],

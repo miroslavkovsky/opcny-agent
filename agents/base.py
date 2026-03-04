@@ -11,7 +11,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from models import async_session, AgentLog
+from models import AgentLog, async_session
 from utils.notifications import notify_miro
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"

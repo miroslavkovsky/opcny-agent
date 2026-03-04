@@ -4,10 +4,18 @@ Tieto tabuľky existujú v zdieľanej PostgreSQL databáze s hlavnou appkou.
 """
 
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime
 
 from sqlalchemy import (
-    String, Text, Integer, BigInteger, Boolean, DateTime, Date, JSON, ARRAY, Index,
+    ARRAY,
+    JSON,
+    BigInteger,
+    Date,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column

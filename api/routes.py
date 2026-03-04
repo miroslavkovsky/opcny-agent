@@ -6,12 +6,12 @@ na monitoring. Chránené internal API kľúčom.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from agents import ContentReviewAgent, SocialMediaAgent, AnalyticsAgent
+from agents import AnalyticsAgent, ContentReviewAgent, SocialMediaAgent
 from config.settings import settings
 
 logger = logging.getLogger("api")
@@ -34,7 +34,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "opcny-agents",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
