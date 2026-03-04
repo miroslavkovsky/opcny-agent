@@ -47,6 +47,9 @@ dev = [
     "mypy>=1.12.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["agents*", "api*", "config*", "models*", "services*", "tasks*", "utils*"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

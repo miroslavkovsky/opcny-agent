@@ -6,6 +6,7 @@ Spustí FastAPI server (health checks + internal API) a APScheduler (agent joby)
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -23,38 +24,55 @@ logging.basicConfig(
 
 logger = logging.getLogger("opcny-agents")
 
+
+async def _init_background(app: FastAPI) -> None:
+    """Inicializácia DB a schedulera na pozadí — neblokuje štart servera."""
+    try:
+        logger.info("Inicializácia databázy (s retry)...")
+        await init_db()
+
+        logger.info("Spúšťam agent scheduler...")
+        scheduler = AgentScheduler()
+        await scheduler.start()
+        app.state.scheduler = scheduler
+        app.state.ready = True
+
+        logger.info("Agent Worker Service je plne pripravený.")
+    except Exception:
+        logger.exception("Background init failed — server beží, ale agenti nie sú aktívni.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup a shutdown lifecycle pre FastAPI."""
+    app.state.ready = False
+    task = asyncio.create_task(_init_background(app))
+
+    logger.info("Server štartuje na porte %d...", settings.server_port)
+
+    yield
+
+    # --- Shutdown ---
+    if not task.done():
+        task.cancel()
+    logger.info("Zastavujem scheduler...")
+    if hasattr(app.state, "scheduler"):
+        await app.state.scheduler.stop()
+
+
 app = FastAPI(
     title="OpcnySimulator Agents",
     version="0.1.0",
     docs_url="/docs" if settings.is_development else None,
+    lifespan=lifespan,
 )
 app.include_router(router)
-
-
-@app.on_event("startup")
-async def startup():
-    logger.info("Inicializácia databázy...")
-    await init_db()
-
-    logger.info("Spúšťam agent scheduler...")
-    scheduler = AgentScheduler()
-    await scheduler.start()
-    app.state.scheduler = scheduler
-
-    logger.info("Agent Worker Service je pripravený.")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    logger.info("Zastavujem scheduler...")
-    if hasattr(app.state, "scheduler"):
-        await app.state.scheduler.stop()
 
 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=settings.agent_api_port,
+        port=settings.server_port,
         log_level=settings.log_level.lower(),
     )
