@@ -11,7 +11,7 @@ Workflow:
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from agents.base import BaseAgent
 from config.persona import PLATFORM_GUIDELINES, WRITING_PERSONA
@@ -55,7 +55,10 @@ class SocialMediaAgent(BaseAgent):
             result = await session.execute(
                 select(ScheduledPost).where(
                     ScheduledPost.status.in_(["scheduled", "approved"]),
-                    ScheduledPost.scheduled_at <= now,
+                    or_(
+                        ScheduledPost.scheduled_at <= now,
+                        ScheduledPost.scheduled_at.is_(None),  # Auto-approved posty bez scheduled_at
+                    ),
                 )
             )
             posts = result.scalars().all()

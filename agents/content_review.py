@@ -9,6 +9,7 @@ Workflow:
 """
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -72,7 +73,13 @@ class ContentReviewAgent(BaseAgent):
                     if review_result.get("overall_status") != "approved":
                         all_approved = False
 
-                post.status = "approved" if all_approved else "needs_changes"
+                if all_approved:
+                    post.status = "approved"
+                    # Nastav scheduled_at ak nie je nastavený, aby publish job post našiel
+                    if not post.scheduled_at:
+                        post.scheduled_at = datetime.now(UTC)
+                else:
+                    post.status = "needs_changes"
                 reviewed += 1
 
             await session.commit()
