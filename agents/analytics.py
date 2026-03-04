@@ -119,7 +119,16 @@ class AnalyticsAgent(BaseAgent):
             await session.commit()
 
         # 6. Notifikuj Mira
-        report_summary = self._format_report_summary(full_metrics, insights, period_type)
+        report_summary = self._render_template(
+            "analytics_report.j2",
+            period_type=period_type,
+            period_start=period_start.isoformat(),
+            period_end=period_end.isoformat(),
+            metrics=metrics,
+            top_pages=top_pages,
+            traffic_sources=traffic_sources,
+            insights=insights,
+        )
         await notify_miro(
             title=f"Analytics Report — {period_type}",
             message=report_summary,
@@ -155,26 +164,3 @@ class AnalyticsAgent(BaseAgent):
             user_message=prompt,
         )
 
-    def _format_report_summary(
-        self, metrics: dict, insights: str, period_type: str
-    ) -> str:
-        """Formátuje report pre Discord/Telegram notifikáciu."""
-        overview = metrics.get("overview", {})
-
-        summary = (
-            f"📊 **{period_type.upper()} Report**\n\n"
-            f"👥 Sessions: {overview.get('sessions', 'N/A')}\n"
-            f"👀 Pageviews: {overview.get('pageviews', 'N/A')}\n"
-            f"📈 Users: {overview.get('active_users', 'N/A')}\n"
-            f"⏱ Avg Duration: {overview.get('avg_session_duration', 'N/A')}s\n"
-            f"🔙 Bounce Rate: {overview.get('bounce_rate', 'N/A')}%\n\n"
-            f"**Top 3 stránky:**\n"
-        )
-
-        top_pages = metrics.get("top_pages", [])[:3]
-        for i, page in enumerate(top_pages, 1):
-            summary += f"{i}. {page.get('page_path', '?')} — {page.get('pageviews', '?')} views\n"
-
-        summary += f"\n**Insights:**\n{insights[:500]}..."
-
-        return summary

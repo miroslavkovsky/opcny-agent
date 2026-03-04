@@ -11,7 +11,7 @@ Workflow:
 import json
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from agents.base import BaseAgent
 from config.persona import CONTENT_REVIEW_RULES, WRITING_PERSONA
@@ -56,6 +56,7 @@ class ContentReviewAgent(BaseAgent):
             reviewed = 0
             for post in pending_posts:
                 # Skontroluj každú platformovú verziu
+                all_approved = True
                 for platform, content in post.content_body.items():
                     review_result = await self._run_review(content, platform)
 
@@ -68,8 +69,10 @@ class ContentReviewAgent(BaseAgent):
                     )
                     session.add(review)
 
-                # Ak všetky platformy OK, nastav status
-                post.status = "approved" if review_result.get("overall_status") == "approved" else "needs_changes"
+                    if review_result.get("overall_status") != "approved":
+                        all_approved = False
+
+                post.status = "approved" if all_approved else "needs_changes"
                 reviewed += 1
 
             await session.commit()
@@ -103,6 +106,25 @@ class ContentReviewAgent(BaseAgent):
             )
             session.add(review)
             await session.commit()
+
+        # Notifikuj Mira so šablónou
+        notification = self._render_template(
+            "review_notification.j2",
+            target_type=target_type,
+            status=review_result.get("overall_status", "needs_changes"),
+            grammar_issues=review_result.get("grammar_issues", []),
+            tone_assessment=review_result.get("tone_assessment", "N/A"),
+            tone_notes=review_result.get("tone_notes", ""),
+            seo_score=review_result.get("seo_score", "N/A"),
+            seo_suggestions=review_result.get("seo_suggestions", []),
+            compliance_ok=review_result.get("compliance_ok", True),
+            summary=review_result.get("summary", ""),
+        )
+        await notify_miro(
+            title=f"Content Review: {target_type}",
+            message=notification,
+            level="info",
+        )
 
         return {"status": "success", "details": review_result}
 
