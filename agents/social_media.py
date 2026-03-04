@@ -54,7 +54,7 @@ class SocialMediaAgent(BaseAgent):
         async with async_session() as session:
             result = await session.execute(
                 select(ScheduledPost).where(
-                    ScheduledPost.status == "approved",
+                    ScheduledPost.status.in_(["scheduled", "approved"]),
                     ScheduledPost.scheduled_at <= now,
                 )
             )
@@ -69,10 +69,34 @@ class SocialMediaAgent(BaseAgent):
             for post in posts:
                 try:
                     results = await self._publish_to_platforms(post)
-                    post.status = "published"
-                    post.published_at = now
-                    post.engagement_data = {"publish_results": results}
-                    published += 1
+
+                    # Skontroluj či aspoň jedna platforma uspela
+                    any_success = any(
+                        r.get("status") == "success" for r in results.values()
+                    )
+                    all_skipped = all(
+                        r.get("status") == "skipped" for r in results.values()
+                    )
+
+                    if all_skipped:
+                        # Žiadna platforma nebola nakonfigurovaná
+                        post.status = "failed"
+                        post.error_message = "All platforms skipped (not configured)"
+                        failed += 1
+                        self.logger.warning(
+                            f"Post {post.id}: všetky platformy preskočené"
+                        )
+                    elif any_success:
+                        post.status = "published"
+                        post.published_at = now
+                        post.engagement_data = {"publish_results": results}
+                        published += 1
+                    else:
+                        # Všetky platformy zlyhali
+                        post.status = "failed"
+                        post.error_message = str(results)
+                        failed += 1
+                        self.logger.error(f"Post {post.id}: všetky platformy zlyhali")
                 except Exception as e:
                     post.status = "failed"
                     post.error_message = str(e)
