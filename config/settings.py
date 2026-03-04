@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     agent_api_port: int = 8001
     internal_api_key: str = ""
 
+    # Railway nastavuje PORT automaticky — použijeme ho ako prioritu
+    port: int | None = None
+
     # --- Database ---
     database_url: str = "postgresql+asyncpg://localhost:5432/opcnysimulator"
 
@@ -53,6 +56,11 @@ class Settings(BaseSettings):
     notification_method: str = "discord"  # discord | telegram
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+
+    @property
+    def server_port(self) -> int:
+        """Port pre server — Railway PORT má prednosť pred agent_api_port."""
+        return self.port if self.port is not None else self.agent_api_port
 
     @property
     def is_development(self) -> bool:

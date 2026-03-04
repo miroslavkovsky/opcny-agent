@@ -4,8 +4,8 @@ OpcnySimulator Agent Worker — Entry Point
 Spustí FastAPI server (health checks + internal API) a APScheduler (agent joby).
 """
 
-import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -23,17 +23,12 @@ logging.basicConfig(
 
 logger = logging.getLogger("opcny-agents")
 
-app = FastAPI(
-    title="OpcnySimulator Agents",
-    version="0.1.0",
-    docs_url="/docs" if settings.is_development else None,
-)
-app.include_router(router)
 
-
-@app.on_event("startup")
-async def startup():
-    logger.info("Inicializácia databázy...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup a shutdown lifecycle pre FastAPI."""
+    # --- Startup ---
+    logger.info("Inicializácia databázy (s retry)...")
     await init_db()
 
     logger.info("Spúšťam agent scheduler...")
@@ -41,20 +36,29 @@ async def startup():
     await scheduler.start()
     app.state.scheduler = scheduler
 
-    logger.info("Agent Worker Service je pripravený.")
+    logger.info("Agent Worker Service je pripravený na porte %d.", settings.server_port)
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown():
+    # --- Shutdown ---
     logger.info("Zastavujem scheduler...")
     if hasattr(app.state, "scheduler"):
         await app.state.scheduler.stop()
+
+
+app = FastAPI(
+    title="OpcnySimulator Agents",
+    version="0.1.0",
+    docs_url="/docs" if settings.is_development else None,
+    lifespan=lifespan,
+)
+app.include_router(router)
 
 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=settings.agent_api_port,
+        port=settings.server_port,
         log_level=settings.log_level.lower(),
     )
