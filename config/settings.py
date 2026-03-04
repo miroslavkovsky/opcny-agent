@@ -2,6 +2,7 @@
 Centrálna konfigurácia — všetky env premenné na jednom mieste.
 """
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,18 +19,17 @@ class Settings(BaseSettings):
     port: int | None = None
 
     # --- Database ---
-    # Railway poskytuje DATABASE_URL ako postgresql:// — konvertujeme na asyncpg v property
     database_url: str = "postgresql+asyncpg://localhost:5432/opcnysimulator"
 
-    @property
-    def async_database_url(self) -> str:
-        """Konvertuje DATABASE_URL na asyncpg scheme pre SQLAlchemy async engine."""
-        url = self.database_url
-        if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return url
+    @field_validator("database_url")
+    @classmethod
+    def ensure_asyncpg_scheme(cls, v: str) -> str:
+        """Railway poskytuje DATABASE_URL ako postgres:// — konvertujeme na asyncpg."""
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # --- Claude API ---
     anthropic_api_key: str = ""

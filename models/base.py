@@ -14,7 +14,7 @@ from config.settings import settings
 logger = logging.getLogger("opcny-agents.db")
 
 engine = create_async_engine(
-    settings.async_database_url,
+    settings.database_url,
     echo=settings.is_development,
     pool_size=5,        # Agent worker nepotrebuje veľký pool
     max_overflow=2,
