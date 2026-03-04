@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/.claude/settings.schema.json",
+  "permissions": {
+    "allow": [
+      "Bash(ruff check *)",
+      "Bash(ruff format *)",
+      "Bash(mypy *)",
+      "Bash(pytest *)",
+      "Bash(python -c *)",
+      "Bash(pip install *)",
+      "Bash(alembic *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(diff *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Read(*)",
+      "Write(agents/*)",
+      "Write(services/*)",
+      "Write(models/*)",
+      "Write(config/*)",
+      "Write(tasks/*)",
+      "Write(api/*)",
+      "Write(utils/*)",
+      "Write(templates/*)",
+      "Write(tests/*)",
+      "Write(main.py)",
+      "Write(pyproject.toml)",
+      "Write(.env.example)",
+      "Write(alembic/*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(railway *)",
+      "Bash(docker *)",
+      "Write(.env)",
+      "Read(.env)"
+    ]
+  }
+}

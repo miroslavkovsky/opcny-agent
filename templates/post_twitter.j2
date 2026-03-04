@@ -1,0 +1,19 @@
+{# Twitter/X Post Template — max 280 chars per tweet #}
+{# Pre thread: každý tweet je oddelený ---TWEET--- #}
+
+{{ hook }}
+
+{% if is_thread %}
+{% for tweet in thread_tweets %}
+{{ tweet | truncate(270) }}
+{% if not loop.last %}
+---TWEET---
+{% endif %}
+{% endfor %}
+{% else %}
+{{ content | truncate(250) }}
+{% endif %}
+
+{% if hashtags %}
+{{ hashtags | join(' ') }}
+{% endif %}

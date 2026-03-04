@@ -1,0 +1,16 @@
+{# Discord Post Template — používaný SocialMediaAgent-om #}
+
+📈 **{{ title }}**
+
+{{ content | truncate(1800) }}
+
+{% if blog_url %}
+🔗 Prečítaj celý článok: {{ blog_url }}
+{% endif %}
+
+{% if tags %}
+{{ tags | join(' • ') }}
+{% endif %}
+
+---
+_OptionsSimulator.com — Nauč sa obchodovať s opciami bez rizika_

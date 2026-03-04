@@ -1,0 +1,29 @@
+{# Content Review Notification — posielaná Mirovi po review #}
+
+🔍 **Content Review: {{ target_type | title }}**
+
+**Stav:** {{ "✅ Schválené" if status == "approved" else "⚠️ Vyžaduje zmeny" }}
+
+{% if grammar_issues %}
+**Gramatika ({{ grammar_issues | length }} problémov):**
+{% for issue in grammar_issues[:5] %}
+  • {{ issue.severity | upper }}: "{{ issue.text }}" → {{ issue.suggestion }}
+{% endfor %}
+{% endif %}
+
+**Tón:** {{ tone_assessment }}
+{% if tone_notes %}{{ tone_notes }}{% endif %}
+
+**SEO skóre:** {{ seo_score }}/100
+{% if seo_suggestions %}
+{% for suggestion in seo_suggestions[:3] %}
+  • {{ suggestion }}
+{% endfor %}
+{% endif %}
+
+**Compliance:** {{ "✅ OK" if compliance_ok else "❌ Problémy" }}
+
+📝 {{ summary }}
+
+---
+_Otvor admin panel pre detaily a schválenie._

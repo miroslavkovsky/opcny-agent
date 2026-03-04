@@ -1,0 +1,20 @@
+{# Instagram Caption Template — max 2200 chars #}
+
+{{ hook }}
+
+{{ content | truncate(1800) }}
+
+{% if cta %}
+👇 {{ cta }}
+{% endif %}
+
+{% if link_in_bio %}
+🔗 Link v bio
+{% endif %}
+
+.
+.
+.
+{% if hashtags %}
+{{ hashtags | join(' ') }}
+{% endif %}

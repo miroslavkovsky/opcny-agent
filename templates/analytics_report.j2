@@ -1,0 +1,30 @@
+{# Analytics Report Template — denný/týždenný report pre Mira #}
+
+📊 **{{ period_type | title }} Analytics Report**
+📅 {{ period_start }} → {{ period_end }}
+
+**Prehľad:**
+👥 Sessions: {{ metrics.sessions | default('N/A') }}
+👀 Pageviews: {{ metrics.pageviews | default('N/A') }}
+🆕 Noví používatelia: {{ metrics.new_users | default('N/A') }}
+⏱️ Priem. trvanie: {{ metrics.avg_session_duration | default('N/A') }}s
+🔙 Bounce rate: {{ metrics.bounce_rate | default('N/A') }}%
+
+{% if top_pages %}
+**Top stránky:**
+{% for page in top_pages[:5] %}
+{{ loop.index }}. {{ page.page_path }} — {{ page.pageviews }} views
+{% endfor %}
+{% endif %}
+
+{% if traffic_sources %}
+**Zdroje návštevnosti:**
+{% for source in traffic_sources[:5] %}
+• {{ source.source }}/{{ source.medium }} — {{ source.sessions }} sessions
+{% endfor %}
+{% endif %}
+
+{% if insights %}
+**AI Insights:**
+{{ insights | truncate(500) }}
+{% endif %}

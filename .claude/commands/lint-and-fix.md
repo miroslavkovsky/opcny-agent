@@ -1,0 +1,1 @@
+Skontroluj celý projekt linterom (ruff check), type checkerom (mypy), a ak existujú testy, spusti ich (pytest). Oprav všetky nájdené problémy automaticky kde je to možné (ruff check --fix). Ak mypy alebo pytest nie sú nainštalované, nainštaluj ich najprv z dev dependencies. Na konci vypiš súhrn — koľko chýb bolo nájdených, koľko opravených, a či sú nejaké zostávajúce problémy.
