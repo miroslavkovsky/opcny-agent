@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # App code + Python deps
 COPY . .
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir .
 
 # Health check — PORT je nastavený Railway, fallback na AGENT_API_PORT alebo 8001
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
