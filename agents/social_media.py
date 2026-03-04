@@ -8,19 +8,18 @@ Workflow:
 4. Sleduje engagement a ukladá metriky
 """
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 
 from agents.base import BaseAgent
-from config.persona import WRITING_PERSONA, PLATFORM_GUIDELINES
-from models import async_session, ScheduledPost
+from config.persona import PLATFORM_GUIDELINES, WRITING_PERSONA
+from models import ScheduledPost, async_session
 from services.claude_service import ClaudeService
 from services.discord_service import DiscordService
-from services.twitter_service import TwitterService
 from services.instagram_service import InstagramService
+from services.twitter_service import TwitterService
 from utils.notifications import notify_miro
 
 
@@ -50,7 +49,7 @@ class SocialMediaAgent(BaseAgent):
 
     async def _publish_scheduled(self) -> dict[str, Any]:
         """Nájde a publikuje všetky schválené posty ktorých čas nastal."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         async with async_session() as session:
             result = await session.execute(

@@ -6,12 +6,12 @@ na monitoring. Chránené internal API kľúčom.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from agents import ContentReviewAgent, SocialMediaAgent, AnalyticsAgent
+from agents import AnalyticsAgent, ContentReviewAgent, SocialMediaAgent
 from config.settings import settings
 
 logger = logging.getLogger("api")
@@ -34,13 +34,13 @@ async def health():
     return {
         "status": "healthy",
         "service": "opcny-agents",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 # --- Scheduler Status ---
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(verify_api_key)])
 async def scheduler_status(request: Request):
     """Vráti stav všetkých naplánovaných jobov."""
     scheduler = getattr(request.app.state, "scheduler", None)
@@ -69,7 +69,7 @@ class AnalyticsRequest(BaseModel):
     end_date: str
 
 
-@router.post("/agents/social-media/generate")
+@router.post("/agents/social-media/generate", dependencies=[Depends(verify_api_key)])
 async def trigger_generate_post(req: GeneratePostRequest):
     """Manuálne vygenerovanie nového postu (volaný z admin panelu)."""
     agent = SocialMediaAgent()
@@ -82,7 +82,7 @@ async def trigger_generate_post(req: GeneratePostRequest):
     return result
 
 
-@router.post("/agents/content-review/review")
+@router.post("/agents/content-review/review", dependencies=[Depends(verify_api_key)])
 async def trigger_review(req: ReviewRequest):
     """Manuálne spustenie review pre konkrétny obsah."""
     agent = ContentReviewAgent()
@@ -95,7 +95,7 @@ async def trigger_review(req: ReviewRequest):
     return result
 
 
-@router.post("/agents/content-review/check-pending")
+@router.post("/agents/content-review/check-pending", dependencies=[Depends(verify_api_key)])
 async def trigger_check_pending():
     """Manuálne spustenie kontroly pending obsahu."""
     agent = ContentReviewAgent()
@@ -103,7 +103,7 @@ async def trigger_check_pending():
     return result
 
 
-@router.post("/agents/analytics/daily")
+@router.post("/agents/analytics/daily", dependencies=[Depends(verify_api_key)])
 async def trigger_daily_analytics():
     """Manuálne spustenie denného analytics reportu."""
     agent = AnalyticsAgent()
@@ -111,7 +111,7 @@ async def trigger_daily_analytics():
     return result
 
 
-@router.post("/agents/analytics/weekly")
+@router.post("/agents/analytics/weekly", dependencies=[Depends(verify_api_key)])
 async def trigger_weekly_analytics():
     """Manuálne spustenie týždenného analytics reportu."""
     agent = AnalyticsAgent()
@@ -119,7 +119,7 @@ async def trigger_weekly_analytics():
     return result
 
 
-@router.post("/agents/analytics/custom")
+@router.post("/agents/analytics/custom", dependencies=[Depends(verify_api_key)])
 async def trigger_custom_analytics(req: AnalyticsRequest):
     """Manuálne spustenie analytics reportu za custom obdobie."""
     agent = AnalyticsAgent()

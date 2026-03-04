@@ -6,9 +6,17 @@ Poskytuje logging, error handling, a DB session management.
 import logging
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
-from models import async_session, AgentLog
+from jinja2 import Environment, FileSystemLoader
+
+from models import AgentLog, async_session
+from utils.notifications import notify_miro
+
+_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+_jinja_env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), trim_blocks=True,
+                         lstrip_blocks=True)
 
 
 class BaseAgent(ABC):
@@ -69,7 +77,15 @@ class BaseAgent(ABC):
                 duration_ms=duration_ms,
             )
 
-            # TODO: Poslať notifikáciu Mirovi o chybe
+            try:
+                await notify_miro(
+                    title=f"Agent {self.name} — chyba",
+                    message=f"Akcia `{action}` zlyhala: {e}",
+                    level="error",
+                )
+            except Exception:
+                self.logger.warning("Nepodarilo sa odoslať error notifikáciu")
+
             return {"status": "error", "error": str(e)}
 
     async def _log(
@@ -95,3 +111,8 @@ class BaseAgent(ABC):
                 await session.commit()
         except Exception as e:
             self.logger.warning(f"Nepodarilo sa zapísať log: {e}")
+
+    def _render_template(self, template_name: str, **context: Any) -> str:
+        """Renderuje Jinja2 šablónu z templates/ adresára."""
+        template = _jinja_env.get_template(template_name)
+        return template.render(**context)

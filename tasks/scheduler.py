@@ -10,7 +10,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from agents import ContentReviewAgent, SocialMediaAgent, AnalyticsAgent
+from agents import AnalyticsAgent, ContentReviewAgent, SocialMediaAgent
 from config.settings import settings
 
 logger = logging.getLogger("scheduler")

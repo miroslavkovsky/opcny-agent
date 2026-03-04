@@ -15,7 +15,6 @@ Setup:
 import base64
 import json
 import logging
-import tempfile
 from typing import Any
 
 from config.settings import settings
