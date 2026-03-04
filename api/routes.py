@@ -56,6 +56,7 @@ class GeneratePostRequest(BaseModel):
     topic: str
     platforms: list[str] = ["discord", "twitter"]
     source_blog_id: int | None = None
+    auto_publish: bool = True
 
 
 class ReviewRequest(BaseModel):
@@ -71,15 +72,39 @@ class AnalyticsRequest(BaseModel):
 
 @router.post("/agents/social-media/generate", dependencies=[Depends(verify_api_key)])
 async def trigger_generate_post(req: GeneratePostRequest):
-    """Manuálne vygenerovanie nového postu (volaný z admin panelu)."""
-    agent = SocialMediaAgent()
-    result = await agent.run(
+    """Manuálne vygenerovanie nového postu (volaný z admin panelu).
+
+    Ak auto_publish=True (default), automaticky spustí review + publish
+    bez čakania na cron joby.
+    """
+    social_agent = SocialMediaAgent()
+    result = await social_agent.run(
         action="generate_post",
         topic=req.topic,
         platforms=req.platforms,
         source_blog_id=req.source_blog_id,
     )
-    return result
+
+    if not req.auto_publish or result.get("status") != "success":
+        return result
+
+    # Automaticky spusti review pending postov
+    review_agent = ContentReviewAgent()
+    review_result = await review_agent.run(action="check_pending")
+    logger.info("Auto-review result: %s", review_result)
+
+    # Automaticky spusti publish
+    publish_result = await social_agent.run(action="publish_scheduled")
+    logger.info("Auto-publish result: %s", publish_result)
+
+    return {
+        "status": "success",
+        "details": {
+            "generate": result.get("details", {}),
+            "review": review_result.get("details", {}),
+            "publish": publish_result.get("details", {}),
+        },
+    }
 
 
 @router.post("/agents/content-review/review", dependencies=[Depends(verify_api_key)])
