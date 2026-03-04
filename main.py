@@ -4,6 +4,7 @@ OpcnySimulator Agent Worker — Entry Point
 Spustí FastAPI server (health checks + internal API) a APScheduler (agent joby).
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -24,23 +25,36 @@ logging.basicConfig(
 logger = logging.getLogger("opcny-agents")
 
 
+async def _init_background(app: FastAPI) -> None:
+    """Inicializácia DB a schedulera na pozadí — neblokuje štart servera."""
+    try:
+        logger.info("Inicializácia databázy (s retry)...")
+        await init_db()
+
+        logger.info("Spúšťam agent scheduler...")
+        scheduler = AgentScheduler()
+        await scheduler.start()
+        app.state.scheduler = scheduler
+        app.state.ready = True
+
+        logger.info("Agent Worker Service je plne pripravený.")
+    except Exception:
+        logger.exception("Background init failed — server beží, ale agenti nie sú aktívni.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup a shutdown lifecycle pre FastAPI."""
-    # --- Startup ---
-    logger.info("Inicializácia databázy (s retry)...")
-    await init_db()
+    app.state.ready = False
+    task = asyncio.create_task(_init_background(app))
 
-    logger.info("Spúšťam agent scheduler...")
-    scheduler = AgentScheduler()
-    await scheduler.start()
-    app.state.scheduler = scheduler
-
-    logger.info("Agent Worker Service je pripravený na porte %d.", settings.server_port)
+    logger.info("Server štartuje na porte %d...", settings.server_port)
 
     yield
 
     # --- Shutdown ---
+    if not task.done():
+        task.cancel()
     logger.info("Zastavujem scheduler...")
     if hasattr(app.state, "scheduler"):
         await app.state.scheduler.stop()
