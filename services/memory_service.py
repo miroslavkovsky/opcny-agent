@@ -9,7 +9,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from config.settings import settings
 from models import AgentMemory, async_session
@@ -95,48 +95,40 @@ class MemoryService:
         query_vector = await self.embeddings.embed(query)
 
         async with async_session() as session:
-            # Základ query — cosine distance (1 - similarity)
-            # pgvector <=> operátor = cosine distance, nižšie = podobnejšie
-            sql = """
-                SELECT
-                    id, agent_name, content_type, topic, content_summary,
-                    platforms, created_at,
-                    1 - (embedding <=> :query_vec::vector) AS similarity
-                FROM agent_memory
-                WHERE 1=1
-            """
-            params: dict = {"query_vec": str(query_vector)}
+            # pgvector cosine_distance cez SQLAlchemy ORM
+            distance = AgentMemory.embedding.cosine_distance(query_vector)
+            similarity = (1 - distance).label("similarity")
+
+            stmt = (
+                select(AgentMemory, similarity)
+                .order_by(distance)
+                .limit(limit)
+            )
 
             if agent_name:
-                sql += " AND agent_name = :agent_name"
-                params["agent_name"] = agent_name
+                stmt = stmt.where(AgentMemory.agent_name == agent_name)
 
             if content_type:
-                sql += " AND content_type = :content_type"
-                params["content_type"] = content_type
+                stmt = stmt.where(AgentMemory.content_type == content_type)
 
             if days_back:
                 cutoff = datetime.now(UTC) - timedelta(days=days_back)
-                sql += " AND created_at >= :cutoff"
-                params["cutoff"] = cutoff
+                stmt = stmt.where(AgentMemory.created_at >= cutoff)
 
-            sql += " ORDER BY embedding <=> :query_vec::vector LIMIT :limit"
-            params["limit"] = limit
-
-            result = await session.execute(text(sql), params)
-            rows = result.fetchall()
+            result = await session.execute(stmt)
+            rows = result.all()
 
         results = []
-        for row in rows:
+        for row_memory, row_similarity in rows:
             results.append({
-                "id": str(row.id),
-                "agent_name": row.agent_name,
-                "content_type": row.content_type,
-                "topic": row.topic,
-                "content_summary": row.content_summary,
-                "platforms": row.platforms,
-                "similarity": round(float(row.similarity), 4),
-                "created_at": row.created_at.isoformat(),
+                "id": str(row_memory.id),
+                "agent_name": row_memory.agent_name,
+                "content_type": row_memory.content_type,
+                "topic": row_memory.topic,
+                "content_summary": row_memory.content_summary,
+                "platforms": row_memory.platforms,
+                "similarity": round(float(row_similarity), 4),
+                "created_at": row_memory.created_at.isoformat(),
             })
 
         logger.debug(
