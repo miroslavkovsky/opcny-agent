@@ -6,6 +6,7 @@ Zdieľa PostgreSQL databázu s hlavnou opcnysimulator appkou.
 import asyncio
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -32,6 +33,7 @@ async def init_db(max_retries: int = 5, base_delay: float = 2.0) -> None:
     for attempt in range(1, max_retries + 1):
         try:
             async with engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Databáza inicializovaná úspešne.")
             return
