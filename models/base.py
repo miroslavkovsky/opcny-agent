@@ -32,10 +32,36 @@ async def init_db(max_retries: int = 5, base_delay: float = 2.0) -> None:
     """Vytvorí tabuľky ak neexistujú. Retry s exponential backoff pri nedostupnej DB."""
     for attempt in range(1, max_retries + 1):
         try:
+            has_pgvector = False
             async with engine.begin() as conn:
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                await conn.run_sync(Base.metadata.create_all)
-            logger.info("Databáza inicializovaná úspešne.")
+                # pgvector extension — optional, memory feature won't work without it
+                try:
+                    await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                    has_pgvector = True
+                except Exception as vec_exc:
+                    logger.warning(
+                        "pgvector extension not available — agent memory disabled: %s",
+                        vec_exc,
+                    )
+
+            # Vytvor tabuľky v novej transakcii
+            tables = [
+                t for t in Base.metadata.sorted_tables
+                if has_pgvector or t.name != "agent_memory"
+            ]
+            async with engine.begin() as conn:
+                await conn.run_sync(
+                    lambda sync_conn: Base.metadata.create_all(
+                        sync_conn, tables=tables, checkfirst=True,
+                    )
+                )
+
+            if not has_pgvector:
+                logger.info(
+                    "Databáza inicializovaná (bez agent_memory — pgvector chýba)."
+                )
+            else:
+                logger.info("Databáza inicializovaná úspešne.")
             return
         except Exception as exc:
             if attempt == max_retries:
