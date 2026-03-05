@@ -8,14 +8,37 @@ Agent si takto "pamätá" o čom písal a neopakuje sa.
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from functools import wraps
+from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import ProgrammingError
 
 from config.settings import settings
 from models import AgentMemory, async_session
 from services.embedding_service import EmbeddingService
 
 logger = logging.getLogger("service.memory")
+
+
+def _graceful_on_missing_table(default_return: Any):
+    """Dekorátor — ak tabuľka agent_memory neexistuje, vráti default hodnotu."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except ProgrammingError as exc:
+                if "UndefinedTableError" in str(exc) or "does not exist" in str(exc):
+                    logger.warning(
+                        "Table agent_memory does not exist yet — %s returning default. "
+                        "Run init_db() or alembic upgrade head.",
+                        func.__name__,
+                    )
+                    return default_return() if callable(default_return) else default_return
+                raise
+        return wrapper
+    return decorator
 
 
 class MemoryService:
@@ -25,6 +48,7 @@ class MemoryService:
         self.embeddings = EmbeddingService()
         self.similarity_threshold = settings.memory_similarity_threshold
 
+    @_graceful_on_missing_table(default_return=None)
     async def store(
         self,
         agent_name: str,
@@ -33,7 +57,7 @@ class MemoryService:
         content_summary: str,
         platforms: list[str] | None = None,
         source_post_id: uuid.UUID | None = None,
-    ) -> AgentMemory:
+    ) -> AgentMemory | None:
         """
         Uloží nový záznam do pamäte agenta s embeddings.
 
@@ -71,6 +95,7 @@ class MemoryService:
         )
         return memory
 
+    @_graceful_on_missing_table(default_return=list)
     async def search_similar(
         self,
         query: str,
@@ -137,6 +162,7 @@ class MemoryService:
         )
         return results
 
+    @_graceful_on_missing_table(default_return=lambda: (False, []))
     async def is_too_similar(
         self,
         topic: str,
@@ -176,6 +202,7 @@ class MemoryService:
 
         return len(similar) > 0, similar
 
+    @_graceful_on_missing_table(default_return=list)
     async def get_recent_topics(
         self,
         agent_name: str,
