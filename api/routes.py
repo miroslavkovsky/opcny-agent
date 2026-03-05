@@ -107,6 +107,16 @@ async def trigger_generate_post(req: GeneratePostRequest):
     }
 
 
+@router.post(
+    "/agents/social-media/publish/{post_id}", dependencies=[Depends(verify_api_key)]
+)
+async def trigger_publish_single(post_id: str):
+    """Okamžitá publikácia jedného postu (volaný z admin panelu — tlačidlo 'Publikovať teraz')."""
+    agent = SocialMediaAgent()
+    result = await agent.run(action="publish_single", post_id=post_id)
+    return result
+
+
 @router.post("/agents/content-review/review", dependencies=[Depends(verify_api_key)])
 async def trigger_review(req: ReviewRequest):
     """Manuálne spustenie review pre konkrétny obsah."""

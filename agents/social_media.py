@@ -41,6 +41,8 @@ class SocialMediaAgent(BaseAgent):
 
         if action == "publish_scheduled":
             return await self._publish_scheduled()
+        elif action == "publish_single":
+            return await self._publish_single(post_id=kwargs["post_id"])
         elif action == "generate_post":
             return await self._generate_post(
                 topic=kwargs["topic"],
@@ -229,6 +231,68 @@ class SocialMediaAgent(BaseAgent):
                 "post_id": post_id,
                 "platforms": platforms,
                 "status": "pending_review",
+            },
+        }
+
+    async def _publish_single(self, post_id: str) -> dict[str, Any]:
+        """Okamžite publikuje jeden konkrétny post (volaný z admin panelu)."""
+        async with async_session() as session:
+            result = await session.execute(
+                select(ScheduledPost).where(ScheduledPost.id == post_id)
+            )
+            post = result.scalar_one_or_none()
+
+            if not post:
+                return {
+                    "status": "error",
+                    "details": {"reason": f"Post {post_id} not found"},
+                }
+
+            if post.status == "published":
+                return {
+                    "status": "skipped",
+                    "details": {"reason": "Post already published"},
+                }
+
+            try:
+                results = await self._publish_to_platforms(post)
+
+                any_success = any(
+                    r.get("status") == "success" for r in results.values()
+                )
+                all_skipped = all(
+                    r.get("status") == "skipped" for r in results.values()
+                )
+
+                if all_skipped:
+                    post.status = "failed"
+                    post.error_message = "All platforms skipped (not configured)"
+                elif any_success:
+                    post.status = "published"
+                    post.published_at = datetime.now(UTC)
+                    post.engagement_data = {"publish_results": results}
+                else:
+                    post.status = "failed"
+                    post.error_message = str(results)
+
+                await session.commit()
+
+            except Exception as e:
+                post.status = "failed"
+                post.error_message = str(e)
+                await session.commit()
+                self.logger.error("Publish single %s failed: %s", post_id, e)
+                return {
+                    "status": "error",
+                    "details": {"reason": str(e), "post_id": post_id},
+                }
+
+        return {
+            "status": post.status if post.status == "published" else "error",
+            "details": {
+                "post_id": post_id,
+                "post_status": post.status,
+                "platform_results": results,
             },
         }
 
