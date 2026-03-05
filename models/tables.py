@@ -6,7 +6,6 @@ Tieto tabuľky existujú v zdieľanej PostgreSQL databáze s hlavnou appkou.
 import uuid
 from datetime import date, datetime
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     JSON,
