@@ -142,7 +142,7 @@ class AgentLog(Base):
 
 
 class AgentMemory(Base):
-    """Pamäť agentov — ukladá embeddingy generovaného obsahu pre deduplikáciu."""
+    """Pamäť agentov — ukladá témy a zhrnutia pre deduplikáciu obsahu."""
     __tablename__ = "agent_memory"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -159,9 +159,6 @@ class AgentMemory(Base):
     )
     content_summary: Mapped[str] = mapped_column(
         Text, nullable=False, comment="Zhrnutie generovaného obsahu"
-    )
-    embedding = mapped_column(
-        Vector(1536), nullable=False, comment="OpenAI text-embedding-3-small vektor"
     )
     platforms: Mapped[list[str] | None] = mapped_column(
         ARRAY(String), nullable=True, comment="Na aké platformy bol obsah publikovaný"

@@ -24,10 +24,6 @@ dependencies = [
 
     # AI
     "anthropic>=0.39.0",
-    "openai>=1.50.0",
-
-    # Vector search (pgvector)
-    "pgvector>=0.3.0",
 
     # Social Media
     "discord.py>=2.4.0",

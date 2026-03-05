@@ -36,11 +36,6 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-4-5-20250929"
     claude_max_tokens: int = 4096
 
-    # --- OpenAI (embeddings pre agent pamäť) ---
-    openai_api_key: str = ""
-    openai_embedding_model: str = "text-embedding-3-small"
-    memory_similarity_threshold: float = 0.85
-
     # --- Discord ---
     discord_bot_token: str = ""
     discord_webhook_url: str = ""

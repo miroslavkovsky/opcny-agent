@@ -16,7 +16,6 @@ from sqlalchemy import or_, select
 
 from agents.base import BaseAgent
 from config.persona import PLATFORM_GUIDELINES, WRITING_PERSONA
-from config.settings import settings
 from models import ScheduledPost, async_session
 from services.claude_service import ClaudeService
 from services.discord_service import DiscordService
@@ -35,14 +34,7 @@ class SocialMediaAgent(BaseAgent):
         self.discord = DiscordService()
         self.twitter = TwitterService()
         self.instagram = InstagramService()
-        self._memory: MemoryService | None = None
-
-    @property
-    def memory(self) -> MemoryService | None:
-        """Lazy init pamäte — aktívna len ak je nastavený OpenAI API kľúč."""
-        if self._memory is None and settings.openai_api_key:
-            self._memory = MemoryService()
-        return self._memory
+        self.memory = MemoryService()
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         action = kwargs.get("action", "publish_scheduled")
@@ -68,7 +60,7 @@ class SocialMediaAgent(BaseAgent):
                     ScheduledPost.status.in_(["scheduled", "approved"]),
                     or_(
                         ScheduledPost.scheduled_at <= now,
-                        ScheduledPost.scheduled_at.is_(None),  # Auto-approved posty bez scheduled_at
+                        ScheduledPost.scheduled_at.is_(None),  # Auto-approved
                     ),
                 )
             )
@@ -141,40 +133,36 @@ class SocialMediaAgent(BaseAgent):
 
         # --- Kontrola pamäte: neopakuj sa ---
         memory_context = ""
-        if self.memory:
-            is_similar, similar_items = await self.memory.is_too_similar(
-                topic=topic,
-                agent_name="SocialMediaAgent",
-                days_back=14,
+        is_duplicate, reason = await self.memory.is_too_similar(
+            topic=topic,
+            agent_name="SocialMediaAgent",
+            days_back=14,
+        )
+        if is_duplicate:
+            self.logger.info(
+                "Téma '%s' je duplicitná: %s",
+                topic[:80], reason,
             )
-            if is_similar:
-                self.logger.info(
-                    "Téma '%s' je príliš podobná nedávnemu obsahu, preskakujem",
-                    topic[:80],
-                )
-                return {
-                    "status": "skipped",
-                    "details": {
-                        "reason": "Topic too similar to recent content",
-                        "similar_to": [
-                            {"topic": s["topic"], "similarity": s["similarity"]}
-                            for s in similar_items
-                        ],
-                    },
-                }
+            return {
+                "status": "skipped",
+                "details": {
+                    "reason": "Topic too similar to recent content",
+                    "duplicate_reason": reason,
+                },
+            }
 
-            # Pridaj kontext o nedávnych témach do promptu
-            recent_topics = await self.memory.get_recent_topics(
-                agent_name="SocialMediaAgent",
-                days_back=7,
-                limit=10,
+        # Pridaj kontext o nedávnych témach do promptu
+        recent = await self.memory.get_recent_topics(
+            agent_name="SocialMediaAgent",
+            days_back=7,
+            limit=10,
+        )
+        if recent:
+            topics_list = "\n".join(f"- {r['topic']}" for r in recent)
+            memory_context = (
+                f"\n\nIMPORTANT — Topics we recently covered (DO NOT repeat these, "
+                f"bring a fresh angle):\n{topics_list}\n"
             )
-            if recent_topics:
-                topics_list = "\n".join(f"- {t}" for t in recent_topics)
-                memory_context = (
-                    f"\n\nIMPORTANT — Topics we recently covered (DO NOT repeat these, "
-                    f"bring a fresh angle):\n{topics_list}\n"
-                )
 
         content_body = {}
 
@@ -223,19 +211,17 @@ class SocialMediaAgent(BaseAgent):
             post_id = str(post.id)
 
         # --- Ulož do pamäte ---
-        if self.memory:
-            # Zhrň obsah zo všetkých platforiem pre embedding
-            summary = " | ".join(
-                f"{p}: {c[:200]}" for p, c in content_body.items()
-            )
-            await self.memory.store(
-                agent_name="SocialMediaAgent",
-                content_type="social_post",
-                topic=topic,
-                content_summary=summary,
-                platforms=platforms,
-                source_post_id=uuid.UUID(post_id),
-            )
+        summary = " | ".join(
+            f"{p}: {c[:200]}" for p, c in content_body.items()
+        )
+        await self.memory.store(
+            agent_name="SocialMediaAgent",
+            content_type="social_post",
+            topic=topic,
+            content_summary=summary,
+            platforms=platforms,
+            source_post_id=uuid.UUID(post_id),
+        )
 
         return {
             "status": "success",
