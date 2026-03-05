@@ -137,11 +137,11 @@ class ContentReviewAgent(BaseAgent):
 
     async def _run_review(self, content: str, platform: str | None = None) -> dict:
         """Pošle obsah do Claude API na kontrolu."""
-        platform_context = f"\nPlatforma: {platform}" if platform else ""
+        platform_context = f"\nPlatform: {platform}" if platform else ""
 
         response = await self.claude.generate(
             system_prompt=f"{WRITING_PERSONA}\n\n{CONTENT_REVIEW_RULES}",
-            user_message=f"Skontroluj nasledujúci obsah:{platform_context}\n\n---\n{content}\n---",
+            user_message=f"Review the following content:{platform_context}\n\n---\n{content}\n---",
             response_format="json",
         )
 

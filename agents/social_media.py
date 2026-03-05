@@ -133,21 +133,22 @@ class SocialMediaAgent(BaseAgent):
             guidelines = PLATFORM_GUIDELINES.get(platform, {})
 
             prompt = (
-                f"Vytvor príspevok pre platformu {platform.upper()} na tému:\n"
+                f"Create a post for {platform.upper()} about:\n"
                 f"{topic}\n\n"
-                f"Pravidlá platformy:\n"
-                f"- Max dĺžka: {guidelines.get('max_length', 2000)} znakov\n"
-                f"- Štýl: {guidelines.get('style', 'profesionálny')}\n"
+                f"Platform rules:\n"
+                f"- Max length: {guidelines.get('max_length', 2000)} characters\n"
+                f"- Style: {guidelines.get('style', 'professional')}\n"
+                f"- Language: English\n"
             )
 
             if guidelines.get("hashtags"):
                 suggested = guidelines.get("suggested_hashtags", [])
-                prompt += f"- Použi relevantné hashtagy z: {', '.join(suggested)}\n"
+                prompt += f"- Use relevant hashtags from: {', '.join(suggested)}\n"
 
             if platform == "twitter" and guidelines.get("thread_max"):
                 prompt += (
-                    f"- Ak je potrebný thread, max {guidelines['thread_max']} tweetov\n"
-                    f"- Oddeľ tweety pomocou ---TWEET---\n"
+                    f"- If a thread is needed, max {guidelines['thread_max']} tweets\n"
+                    f"- Separate tweets with ---TWEET---\n"
                 )
 
             response = await self.claude.generate(
@@ -189,7 +190,6 @@ class SocialMediaAgent(BaseAgent):
             if platform == "discord":
                 result = await self.discord.send_post(
                     content=content,
-                    title=post.title,
                 )
             elif platform == "twitter":
                 result = await self.twitter.post_tweet(content=content)
