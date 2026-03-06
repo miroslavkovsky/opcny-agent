@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from models import AgentMemory, async_session
+from models import AgentMemory, ScheduledPost, async_session
 from services.claude_service import ClaudeService
 
 logger = logging.getLogger("service.memory")
@@ -57,29 +57,40 @@ class MemoryService:
         agent_name: str,
         days_back: int = 7,
         limit: int = 20,
+        only_published: bool = False,
     ) -> list[dict]:
-        """
-        Vráti nedávne témy s ich zhrnutiami pre daného agenta.
+        """Vráti nedávne témy s ich zhrnutiami pre daného agenta.
+
+        Args:
+            only_published: Ak True, vráti len témy kde linked post bol publikovaný.
 
         Returns:
             Zoznam diktov: {"topic": str, "content_summary": str, "created_at": str}
         """
         cutoff = datetime.now(UTC) - timedelta(days=days_back)
 
-        async with async_session() as session:
-            result = await session.execute(
-                select(
-                    AgentMemory.topic,
-                    AgentMemory.content_summary,
-                    AgentMemory.created_at,
-                )
-                .where(
-                    AgentMemory.agent_name == agent_name,
-                    AgentMemory.created_at >= cutoff,
-                )
-                .order_by(AgentMemory.created_at.desc())
-                .limit(limit)
+        query = (
+            select(
+                AgentMemory.topic,
+                AgentMemory.content_summary,
+                AgentMemory.created_at,
             )
+            .where(
+                AgentMemory.agent_name == agent_name,
+                AgentMemory.created_at >= cutoff,
+            )
+        )
+
+        if only_published:
+            query = query.join(
+                ScheduledPost,
+                AgentMemory.source_post_id == ScheduledPost.id,
+            ).where(ScheduledPost.status == "published")
+
+        query = query.order_by(AgentMemory.created_at.desc()).limit(limit)
+
+        async with async_session() as session:
+            result = await session.execute(query)
             rows = result.all()
 
         return [
@@ -103,10 +114,12 @@ class MemoryService:
         Returns:
             Tuple (is_similar, reason) — True ak sa téma opakuje
         """
+        # Kontroluj len proti publikovaným postom — draft/needs_changes/failed neblokujú
         recent = await self.get_recent_topics(
             agent_name=agent_name,
             days_back=days_back,
             limit=20,
+            only_published=True,
         )
 
         if not recent:
