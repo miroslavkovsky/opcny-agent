@@ -146,6 +146,26 @@ async def _get_post_status(post_id: str | None) -> str | None:
         return row
 
 
+class RevisePostRequest(BaseModel):
+    content_body: dict[str, str]
+    review_feedback: dict
+
+
+@router.post(
+    "/agents/social-media/revise/{post_id}", dependencies=[Depends(verify_api_key)]
+)
+async def trigger_revise_post(post_id: str, req: RevisePostRequest):
+    """Prepíše post podľa review feedbacku (volaný z admin panelu — 'Opraviť podľa review')."""
+    agent = SocialMediaAgent()
+    result = await agent.run(
+        action="revise_post",
+        post_id=post_id,
+        content_body=req.content_body,
+        review_feedback=req.review_feedback,
+    )
+    return result
+
+
 @router.post(
     "/agents/social-media/publish/{post_id}", dependencies=[Depends(verify_api_key)]
 )
