@@ -41,9 +41,11 @@ class ClaudeService:
             Text odpovede od Claude
         """
         if response_format == "json":
-            user_message += (
-                "\n\nODPOVEZ IBA VALIDNÝM JSON OBJEKTOM. "
-                "Žiadny markdown, žiadne backticky, iba čistý JSON."
+            # JSON inštrukcia ide do system promptu, nie do user message,
+            # aby sa neleak-ovala do generovaného obsahu
+            system_prompt += (
+                "\n\nIMPORTANT: Respond ONLY with a valid JSON object. "
+                "No markdown, no backticks, no explanation — just pure JSON."
             )
 
         try:
