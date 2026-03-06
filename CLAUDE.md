@@ -43,8 +43,8 @@ opcny-agents/
 │   └── persona.py              # Writing persóna, platform guidelines, review rules
 ├── models/
 │   ├── base.py                 # SQLAlchemy engine, session factory, Base
-│   └── tables.py               # Všetky 4 tabuľky: ScheduledPost, ContentReview,
-│                                #   AnalyticsSnapshot, AgentLog
+│   └── tables.py               # Všetkých 5 tabuliek: ScheduledPost, ContentReview,
+│                                #   AnalyticsSnapshot, AgentLog, AgentMemory
 ├── agents/
 │   ├── base.py                 # BaseAgent ABC — logging, timing, error handling
 │   ├── content_review.py       # ContentReviewAgent
@@ -55,7 +55,8 @@ opcny-agents/
 │   ├── discord_service.py      # Discord webhook posting + notifikácie
 │   ├── twitter_service.py      # X/Twitter tweepy wrapper
 │   ├── instagram_service.py    # Instagram Graph API wrapper
-│   └── ga4_service.py          # Google Analytics 4 Data API
+│   ├── ga4_service.py          # Google Analytics 4 Data API
+│   └── memory_service.py       # Agent pamäť — deduplikácia tém cez Claude
 ├── tasks/
 │   └── scheduler.py            # APScheduler setup, cron joby, job management
 ├── api/
@@ -96,11 +97,18 @@ class MojNovyAgent(BaseAgent):
 ### Databáza
 
 - Zdieľaná PostgreSQL s hlavnou opcnysimulator appkou — NIKDY nemodifikuj tabuľky hlavnej appky
-- Naše tabuľky: `scheduled_posts`, `content_reviews`, `analytics_snapshots`, `agent_logs`
+- Naše tabuľky: `scheduled_posts`, `content_reviews`, `analytics_snapshots`, `agent_logs`, `agent_memory`
 - Používaj `async_session()` context manager pre všetky DB operácie
 - Všetky ID sú UUID (okrem agent_logs ktorý je BIGSERIAL)
 - Vždy použi `timezone=True` pre DateTime stĺpce
 - Model zmeny vyžadujú Alembic migráciu (keď bude nastavený)
+
+### Agent pamäť a deduplikácia
+
+- `MemoryService` (`services/memory_service.py`) ukladá témy generovaných postov do `agent_memory` tabuľky
+- Pri generovaní nového postu sa kontroluje duplicita cez `is_too_similar()` — porovnáva len proti **publikovaným** postom (INNER JOIN s `scheduled_posts` kde `status='published'`)
+- Claude posudzuje sémantickú podobnosť (nie exact match)
+- Kontext nedávnych tém sa pridáva do promptu aby sa agent neopakoval
 
 ### Konfigurácia
 
@@ -111,7 +119,7 @@ class MojNovyAgent(BaseAgent):
 ### Claude API volania
 
 - Vždy používaj `services/claude_service.py` — nikdy nevolaj Anthropic API priamo
-- Pre JSON odpovede použi `response_format="json"` parameter
+- Pre JSON odpovede použi `response_format="json"` parameter — JSON inštrukcia sa automaticky pridá do **system promptu** (nie user message, aby sa neleak-ovala do obsahu)
 - System prompt = persóna + pravidlá (z `config/persona.py`)
 - Model: `claude-sonnet-4-5-20250929` (konfigurovateľné cez env)
 
@@ -173,26 +181,41 @@ from models import async_session, ScheduledPost
 
 ## Workflow a lifecycle príspevkov
 
+### Auto-publish flow (z admin panelu, auto_publish=True)
+
 ```
-[Nový obsah / Blog článok]
+[Admin panel: Generuj post]
         │
         ▼
   generate_post()               ← SocialMediaAgent
+  + kontrola duplicity (MemoryService.is_too_similar)
+  + uloženie do pamäte (agent_memory)
   status: "pending_review"
         │
         ▼
-  _check_pending_content()      ← ContentReviewAgent (cron: každých 30 min)
+  _check_pending_content()      ← ContentReviewAgent (automaticky po generate)
   Kontrola: gramatika, tón, SEO, compliance
   status: "approved" | "needs_changes"
         │
-   [Miro schváli v admin paneli] ← (hlavná appka zmení status)
+        ├── approved → _publish_scheduled() → "published" | "failed"
         │
-        ▼
+        └── needs_changes → Admin panel zobrazí post detail s akciami:
+                │
+                ├── Opraviť podľa review  → POST /agents/social-media/revise/{id}
+                │   (agent prepíše obsah podľa feedbacku, hlavná appka uloží)
+                │
+                ├── Schváliť manuálne     → hlavná appka zmení status na "approved"
+                ├── Publikovať teraz      → POST /agents/social-media/publish/{id}
+                ├── Naplánovať            → hlavná appka nastaví scheduled_at
+                ├── Upraviť manuálne      → hlavná appka edituje content_body
+                └── Odmietnuť / Zmazať   → hlavná appka zmení status / zmaže
+```
+
+### Cron-based flow (na pozadí)
+
+```
+  _check_pending_content()      ← ContentReviewAgent (cron: každých 30 min)
   _publish_scheduled()          ← SocialMediaAgent (cron: 9:00, 13:00, 18:00)
-  Publikácia na Discord/X/Instagram
-  status: "published" | "failed"
-        │
-        ▼
   daily_report()                ← AnalyticsAgent (cron: denne 6:00)
   weekly_report()               ← AnalyticsAgent (cron: pondelok 7:00)
 ```
@@ -221,12 +244,40 @@ Všetky endpointy sú pre internú komunikáciu s hlavnou appkou:
 |--------|------|-------|
 | GET | `/health` | Health check (Railway) |
 | GET | `/status` | Stav scheduler jobov |
-| POST | `/agents/social-media/generate` | Manuálne generovanie postu |
+| POST | `/agents/social-media/generate` | Generovanie postu (auto-review + auto-publish) |
+| POST | `/agents/social-media/publish/{post_id}` | Okamžitá publikácia jedného postu |
+| POST | `/agents/social-media/revise/{post_id}` | Prepísanie postu podľa review feedbacku |
 | POST | `/agents/content-review/review` | Review jedného obsahu |
 | POST | `/agents/content-review/check-pending` | Spustenie kontroly pending |
 | POST | `/agents/analytics/daily` | Denný analytics report |
 | POST | `/agents/analytics/weekly` | Týždenný analytics report |
 | POST | `/agents/analytics/custom` | Custom date range report |
+
+### Generate endpoint response
+
+`POST /agents/social-media/generate` vždy vracia `post_id` a `post_status` na top level v `details`:
+```json
+{
+  "status": "success",
+  "details": {
+    "post_id": "uuid",
+    "post_status": "needs_changes",
+    "platforms": ["discord"],
+    "review": {"reviewed_count": 1},
+    "note": "Post vygenerovaný, review: needs_changes"
+  }
+}
+```
+
+### Revise endpoint
+
+`POST /agents/social-media/revise/{post_id}` — agent prepíše obsah, **neukladá do DB** (to robí hlavná appka):
+```json
+// Request
+{"content_body": {"discord": "..."}, "review_feedback": {"grammar_issues": [...], "summary": "..."}}
+// Response
+{"status": "success", "details": {"post_id": "uuid", "revised_content_body": {"discord": "..."}}}
+```
 
 V development mode je dostupný Swagger UI na `/docs`.
 
@@ -338,15 +389,16 @@ Service beží na porte z `AGENT_API_PORT` (default 8001). Railway automaticky d
 
 ## Priorita implementácie (roadmap)
 
-Aktuálny stav: **kostra hotová, potrebná implementácia**
+Aktuálny stav: **core funguje, agenti generujú a publikujú na Discord**
 
 1. ✅ Projektová štruktúra, modely, base agent
-2. 🔲 Alembic setup + migrácie
-3. 🔲 ContentReviewAgent — plne funkčný s Claude API
-4. 🔲 Discord service — webhook posting + notifikácie Mirovi
-5. 🔲 Admin panel integrácia v hlavnej appke (API volania)
-6. 🔲 SocialMediaAgent — generovanie + publikácia Discord
-7. 🔲 AnalyticsAgent — GA4 Data API integrácia
-8. 🔲 Twitter/X integrácia
-9. 🔲 Instagram integrácia
-10. 🔲 Testy (pytest-asyncio)
+2. ✅ ContentReviewAgent — plne funkčný s Claude API (auto-review)
+3. ✅ SocialMediaAgent — generovanie + publikácia Discord + revízia podľa review
+4. ✅ Discord service — webhook posting + notifikácie Mirovi
+5. ✅ Admin panel integrácia v hlavnej appke (API volania, post detail s akciami)
+6. ✅ Agent pamäť + deduplikácia tém (MemoryService)
+7. 🔲 Alembic setup + migrácie
+8. 🔲 AnalyticsAgent — GA4 Data API integrácia
+9. 🔲 Twitter/X integrácia
+10. 🔲 Instagram integrácia
+11. 🔲 Testy (pytest-asyncio)
