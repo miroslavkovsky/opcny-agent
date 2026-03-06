@@ -235,7 +235,11 @@ class SocialMediaAgent(BaseAgent):
         }
 
     async def _publish_single(self, post_id: str) -> dict[str, Any]:
-        """Okamžite publikuje jeden konkrétny post (volaný z admin panelu)."""
+        """Okamžite publikuje jeden konkrétny post (volaný z admin panelu).
+
+        Vždy číta aktuálny content_body z DB (admin mohol editovať obsah
+        cez PUT /api/admin/agents/posts/{id}/content pred publikáciou).
+        """
         async with async_session() as session:
             result = await session.execute(
                 select(ScheduledPost).where(ScheduledPost.id == post_id)
@@ -245,36 +249,47 @@ class SocialMediaAgent(BaseAgent):
             if not post:
                 return {
                     "status": "error",
-                    "details": {"reason": f"Post {post_id} not found"},
+                    "error": f"Post {post_id} not found",
                 }
 
             if post.status == "published":
                 return {
-                    "status": "skipped",
-                    "details": {"reason": "Post already published"},
+                    "status": "error",
+                    "error": "Post already published",
                 }
 
             try:
-                results = await self._publish_to_platforms(post)
+                platform_results = await self._publish_to_platforms(post)
 
-                any_success = any(
-                    r.get("status") == "success" for r in results.values()
-                )
-                all_skipped = all(
-                    r.get("status") == "skipped" for r in results.values()
-                )
+                published_platforms = [
+                    p for p, r in platform_results.items()
+                    if r.get("status") == "success"
+                ]
+                failed_platforms = [
+                    p for p, r in platform_results.items()
+                    if r.get("status") not in ("success", "skipped")
+                ]
 
-                if all_skipped:
+                if not published_platforms:
                     post.status = "failed"
-                    post.error_message = "All platforms skipped (not configured)"
-                elif any_success:
-                    post.status = "published"
-                    post.published_at = datetime.now(UTC)
-                    post.engagement_data = {"publish_results": results}
-                else:
-                    post.status = "failed"
-                    post.error_message = str(results)
+                    post.error_message = (
+                        "No platform published successfully"
+                        if failed_platforms
+                        else "All platforms skipped (not configured)"
+                    )
+                    await session.commit()
+                    return {
+                        "status": "error",
+                        "error": post.error_message,
+                        "details": {
+                            "post_id": post_id,
+                            "platform_results": platform_results,
+                        },
+                    }
 
+                post.status = "published"
+                post.published_at = datetime.now(UTC)
+                post.engagement_data = {"publish_results": platform_results}
                 await session.commit()
 
             except Exception as e:
@@ -284,15 +299,16 @@ class SocialMediaAgent(BaseAgent):
                 self.logger.error("Publish single %s failed: %s", post_id, e)
                 return {
                     "status": "error",
-                    "details": {"reason": str(e), "post_id": post_id},
+                    "error": str(e),
                 }
 
         return {
-            "status": post.status if post.status == "published" else "error",
+            "status": "success",
             "details": {
                 "post_id": post_id,
-                "post_status": post.status,
-                "platform_results": results,
+                "published_platforms": published_platforms,
+                "failed_platforms": failed_platforms,
+                "platform_results": platform_results,
             },
         }
 
