@@ -123,10 +123,19 @@ class MemoryService:
         )
 
         if not recent:
+            logger.info(
+                "Dedup check for '%s': no published topics found, skipping",
+                topic[:80],
+            )
             return False, ""
 
         topics_list = "\n".join(
             f"- {r['topic']}" for r in recent
+        )
+
+        logger.info(
+            "Dedup check for '%s' against %d published topics:\n%s",
+            topic[:80], len(recent), topics_list,
         )
 
         response = await self.claude.generate(
@@ -148,6 +157,7 @@ class MemoryService:
 
         try:
             import json
+            logger.info("Dedup Claude response: %s", response[:500])
             result = json.loads(response)
             is_dup = result.get("is_duplicate", False)
             reason = result.get("reason", "")
