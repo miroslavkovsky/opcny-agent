@@ -85,6 +85,9 @@ async def trigger_generate_post(req: GeneratePostRequest):
         source_blog_id=req.source_blog_id,
     )
 
+    gen_details = result.get("details", {})
+    post_id = gen_details.get("post_id")
+
     if not req.auto_publish or result.get("status") != "success":
         return result
 
@@ -93,18 +96,54 @@ async def trigger_generate_post(req: GeneratePostRequest):
     review_result = await review_agent.run(action="check_pending")
     logger.info("Auto-review result: %s", review_result)
 
-    # Automaticky spusti publish
+    # Zisti aktuálny stav postu po review
+    post_status = await _get_post_status(post_id)
+
+    if post_status != "approved":
+        # Review neprešiel — post ostáva na manuálne schválenie
+        return {
+            "status": "success",
+            "details": {
+                "post_id": post_id,
+                "post_status": post_status,
+                "platforms": gen_details.get("platforms", []),
+                "review": review_result.get("details", {}),
+                "note": "Post vygenerovaný, review: " + (post_status or "unknown"),
+            },
+        }
+
+    # Review prešiel — publikuj
     publish_result = await social_agent.run(action="publish_scheduled")
     logger.info("Auto-publish result: %s", publish_result)
+
+    # Zisti finálny stav po publish
+    final_status = await _get_post_status(post_id)
 
     return {
         "status": "success",
         "details": {
-            "generate": result.get("details", {}),
+            "post_id": post_id,
+            "post_status": final_status,
+            "platforms": gen_details.get("platforms", []),
             "review": review_result.get("details", {}),
             "publish": publish_result.get("details", {}),
         },
     }
+
+
+async def _get_post_status(post_id: str | None) -> str | None:
+    """Načíta aktuálny status postu z DB."""
+    if not post_id:
+        return None
+    from sqlalchemy import select as sa_select
+
+    from models import ScheduledPost, async_session
+    async with async_session() as session:
+        result = await session.execute(
+            sa_select(ScheduledPost.status).where(ScheduledPost.id == post_id)
+        )
+        row = result.scalar_one_or_none()
+        return row
 
 
 @router.post(
