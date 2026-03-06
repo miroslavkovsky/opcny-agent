@@ -49,6 +49,12 @@ class SocialMediaAgent(BaseAgent):
                 platforms=kwargs.get("platforms", ["discord", "twitter"]),
                 source_blog_id=kwargs.get("source_blog_id"),
             )
+        elif action == "revise_post":
+            return await self._revise_post(
+                post_id=kwargs["post_id"],
+                content_body=kwargs["content_body"],
+                review_feedback=kwargs["review_feedback"],
+            )
         else:
             return {"status": "skipped", "details": {"reason": f"Unknown action: {action}"}}
 
@@ -309,6 +315,72 @@ class SocialMediaAgent(BaseAgent):
                 "published_platforms": published_platforms,
                 "failed_platforms": failed_platforms,
                 "platform_results": platform_results,
+            },
+        }
+
+    async def _revise_post(
+        self,
+        post_id: str,
+        content_body: dict[str, str],
+        review_feedback: dict,
+    ) -> dict[str, Any]:
+        """Prepíše obsah postu podľa review feedbacku cez Claude API.
+
+        Neukladá do DB — to robí hlavná appka po prijatí odpovede.
+        """
+        if not review_feedback:
+            return {
+                "status": "error",
+                "error": "Žiadny review feedback na aplikovanie",
+            }
+
+        # Zostav feedback text pre Claude
+        feedback_parts = []
+        if review_feedback.get("grammar_issues"):
+            for issue in review_feedback["grammar_issues"]:
+                feedback_parts.append(
+                    f"- Grammar ({issue.get('severity', 'info')}): "
+                    f"'{issue.get('text', '')}' → {issue.get('suggestion', '')}"
+                )
+        if review_feedback.get("tone_notes"):
+            feedback_parts.append(f"- Tone: {review_feedback['tone_notes']}")
+        if review_feedback.get("accuracy_issues"):
+            for issue in review_feedback["accuracy_issues"]:
+                feedback_parts.append(f"- Accuracy: {issue}")
+        if review_feedback.get("seo_suggestions"):
+            for sug in review_feedback["seo_suggestions"]:
+                feedback_parts.append(f"- SEO: {sug}")
+        if review_feedback.get("summary"):
+            feedback_parts.append(f"- Summary: {review_feedback['summary']}")
+
+        feedback_text = "\n".join(feedback_parts)
+
+        revised_content = {}
+        for platform, original_text in content_body.items():
+            guidelines = PLATFORM_GUIDELINES.get(platform, {})
+
+            prompt = (
+                f"Revise this {platform.upper()} post based on the review feedback below.\n"
+                f"Keep the same structure, tone, and approximate length.\n"
+                f"Platform max length: {guidelines.get('max_length', 2000)} characters.\n\n"
+                f"ORIGINAL POST:\n{original_text}\n\n"
+                f"REVIEW FEEDBACK:\n{feedback_text}\n\n"
+                f"Write the revised post directly — no explanations, no markdown wrapping."
+            )
+
+            revised = await self.claude.generate(
+                system_prompt=WRITING_PERSONA,
+                user_message=prompt,
+            )
+            revised_content[platform] = revised
+
+        self.logger.info("Post %s revised for platforms: %s", post_id, list(revised_content))
+
+        return {
+            "status": "success",
+            "details": {
+                "post_id": post_id,
+                "revised_content_body": revised_content,
             },
         }
 
