@@ -9,6 +9,7 @@ Workflow:
 """
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -72,7 +73,13 @@ class ContentReviewAgent(BaseAgent):
                     if review_result.get("overall_status") != "approved":
                         all_approved = False
 
-                post.status = "approved" if all_approved else "needs_changes"
+                if all_approved:
+                    post.status = "approved"
+                    # Nastav scheduled_at ak nie je nastavený, aby publish job post našiel
+                    if not post.scheduled_at:
+                        post.scheduled_at = datetime.now(UTC)
+                else:
+                    post.status = "needs_changes"
                 reviewed += 1
 
             await session.commit()
@@ -130,11 +137,11 @@ class ContentReviewAgent(BaseAgent):
 
     async def _run_review(self, content: str, platform: str | None = None) -> dict:
         """Pošle obsah do Claude API na kontrolu."""
-        platform_context = f"\nPlatforma: {platform}" if platform else ""
+        platform_context = f"\nPlatform: {platform}" if platform else ""
 
         response = await self.claude.generate(
             system_prompt=f"{WRITING_PERSONA}\n\n{CONTENT_REVIEW_RULES}",
-            user_message=f"Skontroluj nasledujúci obsah:{platform_context}\n\n---\n{content}\n---",
+            user_message=f"Review the following content:{platform_context}\n\n---\n{content}\n---",
             response_format="json",
         )
 

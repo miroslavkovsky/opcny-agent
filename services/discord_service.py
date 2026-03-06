@@ -56,7 +56,7 @@ class DiscordService:
             embed["image"] = {"url": image_url}
 
         embed["footer"] = {
-            "text": "OptionsSimulator.com — Nauč sa obchodovať s opciami",
+            "text": "OptionsSimulator.com — Learn to trade options risk-free",
         }
 
         payload = {

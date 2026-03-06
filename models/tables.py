@@ -139,3 +139,38 @@ class AgentLog(Base):
     __table_args__ = (
         Index("idx_agent_logs_agent", "agent_name", "created_at"),
     )
+
+
+class AgentMemory(Base):
+    """Pamäť agentov — ukladá témy a zhrnutia pre deduplikáciu obsahu."""
+    __tablename__ = "agent_memory"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    agent_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="Ktorý agent vytvoril záznam"
+    )
+    content_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="social_post | blog_review | analytics_insight"
+    )
+    topic: Mapped[str] = mapped_column(
+        String(500), nullable=False, comment="Téma / krátky popis obsahu"
+    )
+    content_summary: Mapped[str] = mapped_column(
+        Text, nullable=False, comment="Zhrnutie generovaného obsahu"
+    )
+    platforms: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), nullable=True, comment="Na aké platformy bol obsah publikovaný"
+    )
+    source_post_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, comment="Referencia na scheduled_posts.id"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_agent_memory_agent", "agent_name", "created_at"),
+        Index("idx_agent_memory_type", "content_type"),
+    )
